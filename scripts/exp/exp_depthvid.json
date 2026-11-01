@@ -1,0 +1,43 @@
+{
+ "tag": "p2_depthvid",
+ "session": {
+  "input_mode": "video",
+  "graph": {
+   "nodes": [
+    {
+     "id": "input",
+     "type": "source",
+     "source_mode": "video_file",
+     "source_name": "/home/msai/<user>/assets/moraine_576x320.mp4"
+    },
+    {
+     "id": "depth",
+     "type": "pipeline",
+     "pipeline_id": "video-depth-anything"
+    },
+    {
+     "id": "output",
+     "type": "sink"
+    }
+   ],
+   "edges": [
+    {
+     "from": "input",
+     "from_port": "video",
+     "to_node": "depth",
+     "to_port": "video",
+     "kind": "stream"
+    },
+    {
+     "from": "depth",
+     "from_port": "video",
+     "to_node": "output",
+     "to_port": "video",
+     "kind": "stream"
+    }
+   ]
+  }
+ },
+ "warmup": 30,
+ "schedule": []
+}

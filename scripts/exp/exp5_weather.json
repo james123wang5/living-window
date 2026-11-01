@@ -1,0 +1,107 @@
+{
+ "tag": "p2_exp5_weather",
+ "session": {
+  "input_mode": "video",
+  "prompts": [
+   {
+    "text": "A wide view of a mountain lake in the Canadian Rockies: a row of rugged rocky peaks across the back, a steep scree slope on the left, a dense conifer forest on the right shore, and a calm lake in the foreground reflecting the mountains, cinematic landscape photograph, photorealistic, summer midday, clear blue sky, bright sunlight, turquoise water, green forest",
+    "weight": 1.0
+   }
+  ],
+  "parameters": {
+   "vace_ref_images": [
+    "/home/msai/<user>/assets/moraine_576x320.png"
+   ]
+  },
+  "graph": {
+   "nodes": [
+    {
+     "id": "depth",
+     "type": "source",
+     "source_mode": "video_file",
+     "source_name": "/home/msai/<user>/assets/moraine_576x320_depth.mp4"
+    },
+    {
+     "id": "longlive",
+     "type": "pipeline",
+     "pipeline_id": "longlive"
+    },
+    {
+     "id": "output",
+     "type": "sink"
+    }
+   ],
+   "edges": [
+    {
+     "from": "depth",
+     "from_port": "video",
+     "to_node": "longlive",
+     "to_port": "vace_input_frames",
+     "kind": "stream"
+    },
+    {
+     "from": "longlive",
+     "from_port": "video",
+     "to_node": "output",
+     "to_port": "video",
+     "kind": "stream"
+    }
+   ]
+  }
+ },
+ "warmup": 25,
+ "schedule": [
+  {
+   "label": "rain_scale1.0",
+   "params": {
+    "transition": {
+     "target_prompts": [
+      {
+       "text": "Torrential heavy rain pouring down. Dense sheets of rain fall in long diagonal streaks across the entire frame, countless raindrops splash on the lake surface and create expanding circular ripples, the water is rough and grey, low dark storm clouds hang over the peaks, mist rising from the wet forest, dim gloomy light. A wide view of a mountain lake in the Canadian Rockies: a row of rugged rocky peaks across the back, a steep scree slope on the left, a dense conifer forest on the right shore, and a calm lake in the foreground reflecting the mountains, cinematic landscape photograph, photorealistic",
+       "weight": 1.0
+      }
+     ],
+     "num_steps": 4
+    }
+   },
+   "hold": 30
+  },
+  {
+   "label": "rain_scale0.6",
+   "params": {
+    "vace_context_scale": 0.6
+   },
+   "hold": 25
+  },
+  {
+   "label": "fog_scale0.6",
+   "params": {
+    "transition": {
+     "target_prompts": [
+      {
+       "text": "Thick dense fog fills the whole valley. Heavy white mist rolls across the lake and swallows the forest, the mountain peaks fade into the fog and are barely visible, soft diffused grey light, very low visibility, damp quiet air. A wide view of a mountain lake in the Canadian Rockies: a row of rugged rocky peaks across the back, a steep scree slope on the left, a dense conifer forest on the right shore, and a calm lake in the foreground reflecting the mountains, cinematic landscape photograph, photorealistic",
+       "weight": 1.0
+      }
+     ],
+     "num_steps": 4
+    }
+   },
+   "hold": 30
+  },
+  {
+   "label": "snow_scale0.6",
+   "params": {
+    "transition": {
+     "target_prompts": [
+      {
+       "text": "A heavy snowstorm. Large snowflakes fall densely across the whole frame, swirling in the wind, thick fresh snow piles on the trees and the shore, the lake is partly frozen, white hazy air, cold blue-grey light. A wide view of a mountain lake in the Canadian Rockies: a row of rugged rocky peaks across the back, a steep scree slope on the left, a dense conifer forest on the right shore, and a calm lake in the foreground reflecting the mountains, cinematic landscape photograph, photorealistic",
+       "weight": 1.0
+      }
+     ],
+     "num_steps": 4
+    }
+   },
+   "hold": 30
+  }
+ ]
+}

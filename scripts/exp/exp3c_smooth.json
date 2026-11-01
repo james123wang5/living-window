@@ -1,0 +1,126 @@
+{
+ "tag": "p2_exp3c_smooth",
+ "session": {
+  "input_mode": "video",
+  "prompts": [
+   {
+    "text": "A wide view of a mountain lake in the Canadian Rockies: a row of rugged rocky peaks across the back, a steep scree slope on the left, a dense conifer forest on the right shore, and a calm lake in the foreground reflecting the mountains, cinematic landscape photograph, photorealistic, summer midday, clear blue sky, bright sunlight, turquoise water, green forest",
+    "weight": 1.0
+   }
+  ],
+  "parameters": {
+   "noise_scale": 1.0
+  },
+  "graph": {
+   "nodes": [
+    {
+     "id": "input",
+     "type": "source",
+     "source_mode": "video_file",
+     "source_name": "/home/msai/<user>/assets/moraine_576x320.mp4"
+    },
+    {
+     "id": "depth",
+     "type": "source",
+     "source_mode": "video_file",
+     "source_name": "/home/msai/<user>/assets/moraine_576x320_depth.mp4"
+    },
+    {
+     "id": "longlive",
+     "type": "pipeline",
+     "pipeline_id": "longlive"
+    },
+    {
+     "id": "output",
+     "type": "sink"
+    }
+   ],
+   "edges": [
+    {
+     "from": "input",
+     "from_port": "video",
+     "to_node": "longlive",
+     "to_port": "video",
+     "kind": "stream"
+    },
+    {
+     "from": "depth",
+     "from_port": "video",
+     "to_node": "longlive",
+     "to_port": "vace_input_frames",
+     "kind": "stream"
+    },
+    {
+     "from": "longlive",
+     "from_port": "video",
+     "to_node": "output",
+     "to_port": "video",
+     "kind": "stream"
+    }
+   ]
+  }
+ },
+ "warmup": 25,
+ "schedule": [
+  {
+   "label": "autumn_s4",
+   "params": {
+    "transition": {
+     "target_prompts": [
+      {
+       "text": "A wide view of a mountain lake in the Canadian Rockies: a row of rugged rocky peaks across the back, a steep scree slope on the left, a dense conifer forest on the right shore, and a calm lake in the foreground reflecting the mountains, cinematic landscape photograph, photorealistic, autumn, the forest full of golden yellow larches and orange foliage mixed with dark evergreens, a light dusting of fresh snow on the peaks, crisp clear autumn light, the lake reflecting the golden trees",
+       "weight": 1.0
+      }
+     ],
+     "num_steps": 4
+    }
+   },
+   "hold": 30
+  },
+  {
+   "label": "winter_s8",
+   "params": {
+    "transition": {
+     "target_prompts": [
+      {
+       "text": "A wide view of a mountain lake in the Canadian Rockies: a row of rugged rocky peaks across the back, a steep scree slope on the left, a dense conifer forest on the right shore, and a calm lake in the foreground reflecting the mountains, cinematic landscape photograph, photorealistic, deep winter, thick white snow covering the whole forest and the shoreline, snow-laden trees, the lake frozen and covered with ice and snow, the peaks fully white, soft overcast light, cold blue-white tones",
+       "weight": 1.0
+      }
+     ],
+     "num_steps": 8
+    }
+   },
+   "hold": 30
+  },
+  {
+   "label": "sunset_s4",
+   "params": {
+    "transition": {
+     "target_prompts": [
+      {
+       "text": "A wide view of a mountain lake in the Canadian Rockies: a row of rugged rocky peaks across the back, a steep scree slope on the left, a dense conifer forest on the right shore, and a calm lake in the foreground reflecting the mountains, cinematic landscape photograph, photorealistic, sunset, the sky blazing orange pink and purple, warm golden alpenglow on the peaks, long shadows, the lake reflecting the fiery sky",
+       "weight": 1.0
+      }
+     ],
+     "num_steps": 4
+    }
+   },
+   "hold": 30
+  },
+  {
+   "label": "summer_s8",
+   "params": {
+    "transition": {
+     "target_prompts": [
+      {
+       "text": "A wide view of a mountain lake in the Canadian Rockies: a row of rugged rocky peaks across the back, a steep scree slope on the left, a dense conifer forest on the right shore, and a calm lake in the foreground reflecting the mountains, cinematic landscape photograph, photorealistic, summer midday, clear blue sky, bright sunlight, turquoise water, green forest",
+       "weight": 1.0
+      }
+     ],
+     "num_steps": 8
+    }
+   },
+   "hold": 30
+  }
+ ]
+}

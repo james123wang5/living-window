@@ -1,0 +1,31 @@
+diff --git a/src/scope/core/pipelines/wan2_1/blocks/preprocess_video.py b/src/scope/core/pipelines/wan2_1/blocks/preprocess_video.py
+index a17954b..b60906a 100644
+--- a/src/scope/core/pipelines/wan2_1/blocks/preprocess_video.py
++++ b/src/scope/core/pipelines/wan2_1/blocks/preprocess_video.py
+@@ -186,6 +186,9 @@ def preprocess_masks(
+ 
+     # Stack and rearrange: list of [1, H, W, C] -> [B, C, T, H, W]
+     masks = rearrange(torch.stack(masks, dim=1), "B T H W C -> B C T H W")
++    # 本地补丁：视频文件来的遮罩是 3 通道 RGB，VACE 要求单通道，取第一个通道
++    if masks.shape[1] > 1:
++        masks = masks[:, :1]
+     # Normalize from [0, 255] uint8 to [0, 1] float (binary masks)
+     masks = (masks.float() / 255.0).clamp(0, 1)
+ 
+diff --git a/src/scope/server/headless.py b/src/scope/server/headless.py
+index 3ffd357..d330f87 100644
+--- a/src/scope/server/headless.py
++++ b/src/scope/server/headless.py
+@@ -86,8 +86,11 @@ class HeadlessTsStreamer(HeadlessMediaSink):
+         import av
+ 
+         self._container = av.open(self._buffer, "w", format="mpegts")
++        # 本地补丁：实时预览需要低延迟，关闭 libx264 默认的约 40 帧预读缓冲
+         self._video_stream = self._container.add_stream(
+-            "libx264", rate=int(RECORDING_MAX_FPS)
++            "libx264",
++            rate=int(RECORDING_MAX_FPS),
++            options={"tune": "zerolatency", "preset": "veryfast"},
+         )
+         self._video_stream.width = width + (width % 2)
+         self._video_stream.height = height + (height % 2)

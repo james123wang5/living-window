@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>实时窗景</title>
+<style>
+  :root {
+    --panel-bg: rgba(18, 20, 24, 0.62);
+    --panel-border: rgba(255, 255, 255, 0.10);
+    --text: #eef1f4;
+    --muted: #9aa3ad;
+    --accent: #7cc4ff;
+    --ok: #7be0a6;
+    --warn: #ffcf70;
+    --chip: rgba(255, 255, 255, 0.08);
+    --chip-hover: rgba(255, 255, 255, 0.16);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0b0c0e; color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif; overflow: hidden; }
+  #wall { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; background: #000; }
+  #fx { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; pointer-events: none; }
+  .toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+  #panel { position: fixed; top: 16px; right: 16px; bottom: 16px; width: 360px; max-width: calc(100vw - 32px);
+    display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 16px;
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    backdrop-filter: blur(18px) saturate(1.2); -webkit-backdrop-filter: blur(18px) saturate(1.2);
+    transition: transform .35s ease, opacity .35s ease; }
+  #panel.hidden { transform: translateX(calc(100% + 24px)); opacity: 0; pointer-events: none; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: .02em; }
+  .pill { font-size: 12px; padding: 2px 10px; border-radius: 999px; background: var(--chip); color: var(--muted); white-space: nowrap; }
+  .pill.gen { color: var(--warn); } .pill.hold { color: var(--ok); }
+  .stats { font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
+  form { display: flex; gap: 8px; }
+  textarea { flex: 1; resize: none; height: 64px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--panel-border);
+    background: rgba(0,0,0,.25); color: var(--text); font: inherit; outline: none; }
+  textarea:focus { border-color: var(--accent); }
+  button { font: inherit; color: var(--text); background: var(--chip); border: 1px solid var(--panel-border);
+    border-radius: 10px; padding: 0 14px; cursor: pointer; }
+  button:hover { background: var(--chip-hover); }
+  button.primary { background: rgba(124,196,255,.22); border-color: rgba(124,196,255,.45); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button { padding: 4px 10px; font-size: 12px; border-radius: 999px; }
+  #history { flex: 1; overflow-y: auto; display: flex; flex-direction: column-reverse; gap: 8px; padding-right: 2px; }
+  .item { padding: 10px 12px; border-radius: 10px; background: rgba(0,0,0,.22); border: 1px solid var(--panel-border); }
+  .item .q { font-weight: 600; }
+  .item .m { font-size: 12px; color: var(--muted); margin-top: 4px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .item .m b { color: var(--text); font-weight: 600; }
+  .item details { margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .item summary { cursor: pointer; }
+  .item .p { margin-top: 4px; word-break: break-word; }
+  footer { display: flex; justify-content: space-between; gap: 8px; }
+  footer button { height: 32px; font-size: 12px; }
+  #toggle { position: fixed; right: 16px; bottom: 16px; height: 36px; display: none; }
+  #toggle.show { display: block; }
+  #empty { position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
+  @media (max-width: 640px) {
+    #panel { top: auto; height: 55vh; left: 16px; right: 16px; width: auto; }
+  }
+</style>
+</head>
+<body>
+<canvas id="wall"></canvas>
+<canvas id="fx"></canvas>
+<div id="empty">正在连接生成服务…</div>
+
+<aside id="panel">
+  <header>
+    <h1>实时窗景</h1>
+    <span id="status" class="pill">连接中</span>
+  </header>
+  <div class="stats">
+    <span>生成 <b id="fps">–</b> 帧/秒</span>
+    <span>缓冲 <b id="buf">0</b> 帧</span>
+    <span>已收 <b id="cnt">0</b> 帧</span>
+    <label class="toggle"><input type="checkbox" id="fxOn"> 天气特效层（默认关闭：画面只显示模型生成的内容）</label>
+  </div>
+  <form id="form">
+    <textarea id="text" placeholder="说说想看什么，比如：我想看特别大的雨，雾气弥漫"></textarea>
+    <button class="primary" type="submit">发送</button>
+  </form>
+  <div class="chips" id="chips"></div>
+  <div id="history"></div>
+  <footer>
+    <button id="reset" type="button">回到原图</button>
+    <button id="hide" type="button">收起面板</button>
+  </footer>
+</aside>
+<button id="toggle" type="button">打开面板</button>
+
+<script>
+const canvas = document.getElementById('wall');
+const ctx = canvas.getContext('2d');
+const $ = (id) => document.getElementById(id);
+const PRESETS = ['我想看特别大的雨，雾气弥漫', '浓雾', '暴风雪', '雨停了，放晴', '日落', '星空夜晚', '秋天'];
+
+// ---------- 画布 ----------
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(innerWidth * dpr);
+  canvas.height = Math.round(innerHeight * dpr);
+}
+addEventListener('resize', resize); resize();
+
+function drawCover(img, alpha) {
+  const cw = canvas.width, ch = canvas.height;
+  const s = Math.max(cw / img.width, ch / img.height);
+  const w = img.width * s, h = img.height * s;
+  ctx.globalAlpha = alpha;
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, (cw - w) / 2, (ch - h) / 2, w, h);
+  ctx.globalAlpha = 1;
+}
+
+// ---------- 帧接收 ----------
+const queue = [];          // 待播放的帧 {img, t}
+const arrivals = [];       // 最近到达时刻，用于估计源帧率
+let received = 0;
+const probe = document.createElement('canvas'); probe.width = 16; probe.height = 9;
+const pctx = probe.getContext('2d', { willReadFrequently: true });
+let lastVec = null;        // 最新到达帧的缩略特征
+let pending = null;        // 等待“开始变化”的那条指令
+
+function featureOf(img) {
+  pctx.drawImage(img, 0, 0, 16, 9);
+  return pctx.getImageData(0, 0, 16, 9).data;
+}
+function diff(a, b) {
+  let s = 0;
+  for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i] - b[i]) + Math.abs(a[i+1] - b[i+1]) + Math.abs(a[i+2] - b[i+2]);
+  return s / (a.length / 4 * 3);
+}
+
+async function onFrame(jpeg) {
+  const img = await createImageBitmap(new Blob([jpeg], { type: 'image/jpeg' }));
+  const now = performance.now();
+  received++; arrivals.push(now); while (arrivals.length && now - arrivals[0] > 12000) arrivals.shift();
+  const vec = featureOf(img);
+  if (pending) {
+    if (pending.firstFrameAt == null) { pending.firstFrameAt = now; pending.el.querySelector('.ff').textContent = ((now - pending.sentAt) / 1000).toFixed(1) + ' 秒'; }
+    if (pending.firstChangeAt == null && diff(vec, pending.baseline) > 6) {
+      pending.firstChangeAt = now;
+      pending.el.querySelector('.fc').textContent = ((now - pending.sentAt) / 1000).toFixed(1) + ' 秒';
+    }
+  }
+  lastVec = vec;
+  queue.push({ img, t: now });
+  if (queue.length > 60) queue.splice(0, queue.length - 24);   // 积压太多就追上
+  $('cnt').textContent = received;
+  $('empty').style.display = 'none';
+}
+
+async function readStream() {
+  while (true) {
+    try {
+      const res = await fetch('/stream');
+      const reader = res.body.getReader();
+      let buf = new Uint8Array(0);
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const nb = new Uint8Array(buf.length + value.length); nb.set(buf); nb.set(value, buf.length); buf = nb;
+        while (buf.length >= 12) {
+          const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+          const len = dv.getUint32(0);
+          if (buf.length < 12 + len) break;
+          const jpeg = buf.slice(12, 12 + len);
+          buf = buf.slice(12 + len);
+          await onFrame(jpeg);
+        }
+      }
+    } catch (e) { /* 断线重连 */ }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+}
+
+// ---------- 播放：均匀播出 + 帧间淡入淡出 ----------
+let cur = null, prev = null, switchedAt = 0;
+function srcInterval() {
+  if (arrivals.length < 6) return 220;
+  const span = arrivals[arrivals.length - 1] - arrivals[0];
+  const rate = (arrivals.length - 1) / (span / 1000);
+  return Math.min(600, Math.max(60, 1000 / rate));
+}
+function tick(now) {
+  let interval = srcInterval();
+  if (queue.length > 20) interval *= 0.7; else if (queue.length < 4) interval *= 1.2;
+  if (queue.length && (!cur || now - switchedAt >= interval)) {
+    prev = cur; cur = queue.shift(); switchedAt = now;
+  }
+  if (cur) {
+    const a = prev ? Math.min(1, (now - switchedAt) / interval) : 1;
+    if (prev) drawCover(prev.img, 1);
+    drawCover(cur.img, a);
+  }
+  $('buf').textContent = queue.length;
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+// ---------- 状态与指令 ----------
+async function pollState() {
+  try {
+    const s = await (await fetch('/api/state')).json();
+    $('fps').textContent = s.fps || '–';
+    if (s.scene) FX.setTarget(s.scene);
+    const el = $('status');
+    el.className = 'pill ' + (s.status === 'holding' ? 'hold' : s.status === 'generating' ? 'gen' : '');
+    el.textContent = s.status === 'holding' ? '已定住' : s.status === 'generating' ? '生成中' : s.status === 'starting' ? '启动中' : s.status;
+    if (pending && s.status === 'holding' && pending.holdAt == null) {
+      pending.holdAt = performance.now();
+      pending.el.querySelector('.hd').textContent = ((pending.holdAt - pending.sentAt) / 1000).toFixed(1) + ' 秒';
+      pending = null;
+    }
+  } catch (e) {}
+  setTimeout(pollState, 700);
+}
+pollState();
+
+async function send(text) {
+  text = text.trim(); if (!text) return;
+  const el = document.createElement('div'); el.className = 'item';
+  el.innerHTML = `<div class="q"></div>
+    <div class="m"><span>收到新帧 <b class="ff">…</b></span><span>开始变化 <b class="fc">…</b></span><span>定住 <b class="hd">…</b></span></div>
+    <details><summary>发给模型的提示词</summary><div class="n"></div><div class="p"></div></details>`;
+  el.querySelector('.q').textContent = text;
+  $('history').prepend(el);
+  pending = { sentAt: performance.now(), baseline: lastVec, el };
+  try {
+    const r = await (await fetch('/api/command', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) })).json();
+    if (r.error) throw new Error(r.error);
+    el.querySelector('.n').textContent = (r.notes || []).join('；');
+    el.querySelector('.p').textContent = r.prompt;
+  } catch (e) {
+    el.querySelector('.m').textContent = '发送失败：' + e.message; pending = null;
+  }
+}
+$('form').addEventListener('submit', (e) => { e.preventDefault(); send($('text').value); $('text').value = ''; });
+$('text').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('form').requestSubmit(); } });
+for (const p of PRESETS) { const b = document.createElement('button'); b.type = 'button'; b.textContent = p; b.onclick = () => send(p); $('chips').appendChild(b); }
+$('reset').onclick = () => fetch('/api/reset', { method: 'POST' });
+$('hide').onclick = () => { $('panel').classList.add('hidden'); $('toggle').classList.add('show'); };
+$('toggle').onclick = () => { $('panel').classList.remove('hidden'); $('toggle').classList.remove('show'); };
+readStream();
+</script>
+<script>
+// ---------- 天气特效层：模型负责光照和氛围，特效层负责雨丝、涟漪、雾团、雪花这类快速运动的细节 ----------
+const FX = (() => {
+  const c = document.getElementById('fx'), g = c.getContext('2d');
+  // 水面从图像高度的这个比例开始（只适用于 Moraine Lake；以后换成自动分割出的水面区域）
+  const WATER_TOP = 0.74;
+  const IMG_W = 576, IMG_H = 320;
+  const level = { rain: 0, fog: 0, snow: 0, flash: 0 };      // 当前（平滑后）强度 0–1
+  const target = { rain: 0, fog: 0, snow: 0, thunder: false };
+  let W = 0, H = 0, dpr = 1, last = performance.now(), nextBolt = 0;
+  const drops = [], flakes = [], ripples = [];
+  let fogSprite = null, fogX = 0;
+
+  function resize() {
+    dpr = window.devicePixelRatio || 1;
+    W = c.width = Math.round(innerWidth * dpr); H = c.height = Math.round(innerHeight * dpr);
+    fogSprite = makeFog();
+  }
+  // 画面里图像的实际位置（与壁纸同样的铺满方式）
+  function imgRect() {
+    const s = Math.max(W / IMG_W, H / IMG_H), w = IMG_W * s, h = IMG_H * s;
+    return { x: (W - w) / 2, y: (H - h) / 2, w, h };
+  }
+  function makeFog() {
+    const fc = document.createElement('canvas'); fc.width = 1024; fc.height = 512;
+    const f = fc.getContext('2d');
+    for (let i = 0; i < 90; i++) {
+      const x = Math.random() * 1024, y = 120 + Math.random() * 360, r = 60 + Math.random() * 180;
+      const grd = f.createRadialGradient(x, y, 0, x, y, r);
+      grd.addColorStop(0, 'rgba(235,238,242,0.22)'); grd.addColorStop(1, 'rgba(235,238,242,0)');
+      f.fillStyle = grd;
+      for (const dx of [-1024, 0, 1024]) { f.save(); f.translate(dx, 0); f.beginPath(); f.arc(x, y, r, 0, 7); f.fill(); f.restore(); }
+    }
+    return fc;
+  }
+  function newDrop(any) {
+    const z = Math.random();                     // 0 远 – 1 近
+    return { x: Math.random() * W * 1.2 - W * 0.1, y: any ? Math.random() * H : -Math.random() * H * 0.3,
+             z, v: (900 + 1500 * z) * dpr, len: (10 + 50 * z) * dpr };
+  }
+  function newFlake(any) {
+    const z = Math.random();
+    return { x: Math.random() * W, y: any ? Math.random() * H : -10, z, v: (25 + 110 * z) * dpr,
+             r: (0.8 + 2.8 * z) * dpr, ph: Math.random() * 6.28, sw: (6 + 22 * z) * dpr };
+  }
+  const WIND = 0.18;   // 雨的倾斜
+
+  function step(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    const k = 1 - Math.exp(-dt / 6);             // 约 6 秒的时间常数，和模型的渐变大致同步
+    level.rain += (target.rain / 3 - level.rain) * k;
+    level.fog += (target.fog / 2 - level.fog) * k;
+    level.snow += (target.snow / 2 - level.snow) * k;
+    g.clearRect(0, 0, W, H);
+    if (!document.getElementById('fxOn').checked) { requestAnimationFrame(step); return; }
+    const R = imgRect();
+    const area = (W * H) / (1440 * 900 * dpr * dpr);
+
+    // 雾：缓慢漂移的雾团，越往谷底越浓
+    if (level.fog > 0.01) {
+      fogX = (fogX + dt * 12 * dpr) % (R.w);
+      const a = Math.min(0.85, level.fog * 0.95);
+      const grd = g.createLinearGradient(0, R.y + R.h * 0.15, 0, R.y + R.h * 0.85);
+      grd.addColorStop(0, `rgba(200,206,212,${a * 0.3})`); grd.addColorStop(0.55, `rgba(200,206,212,${a * 0.62})`);
+      grd.addColorStop(1, `rgba(200,206,212,${a * 0.42})`);
+      g.fillStyle = grd; g.fillRect(0, 0, W, H);
+      g.globalAlpha = Math.min(1, level.fog * 1.4);
+      for (const off of [0, R.w]) g.drawImage(fogSprite, R.x - fogX + off, R.y + R.h * 0.2, R.w, R.h * 0.8);
+      g.globalAlpha = 1;
+    }
+
+    // 雨：三层雨丝 + 雨幕灰调 + 湖面涟漪
+    const nRain = Math.round(1600 * level.rain * area);
+    while (drops.length < nRain) drops.push(newDrop(true));
+    if (drops.length > nRain) drops.length = nRain;
+    if (nRain) {
+      // 大雨天整体更暗：深灰蓝压暗，而不是浅灰发白
+      g.fillStyle = `rgba(32,40,52,${0.32 * level.rain})`; g.fillRect(0, 0, W, H);
+      for (const [lo, hi, a, w] of [[0, 0.4, 0.16, 1], [0.4, 0.8, 0.24, 1.3], [0.8, 1.01, 0.32, 1.8]]) {
+        g.beginPath(); g.strokeStyle = `rgba(210,220,230,${a * Math.min(1, level.rain * 1.5)})`; g.lineWidth = w * dpr; g.lineCap = 'round';
+        for (const d of drops) if (d.z >= lo && d.z < hi) { g.moveTo(d.x, d.y); g.lineTo(d.x - d.len * WIND, d.y + d.len); }
+        g.stroke();
+      }
+      for (const d of drops) {
+        d.y += d.v * dt; d.x -= d.v * dt * WIND;
+        if (d.y > H) Object.assign(d, newDrop(false));
+      }
+      // 涟漪：越近（画面越低）越大
+      const waterTop = R.y + R.h * WATER_TOP;
+      let spawn = 70 * level.rain * area * dt * (H - waterTop) / H * 4;
+      while (spawn > 0) { if (Math.random() < spawn) {
+        const y = waterTop + Math.random() * Math.max(1, Math.min(H, R.y + R.h) - waterTop);
+        const near = (y - waterTop) / Math.max(1, (R.y + R.h - waterTop));
+        ripples.push({ x: Math.random() * W, y, t: 0, life: 0.6 + Math.random() * 0.5, rmax: (4 + 22 * near) * dpr });
+      } spawn -= 1; }
+      g.lineWidth = 1 * dpr;
+      for (let i = ripples.length - 1; i >= 0; i--) {
+        const r = ripples[i]; r.t += dt;
+        if (r.t > r.life) { ripples.splice(i, 1); continue; }
+        const p = r.t / r.life, rad = r.rmax * (0.2 + 0.8 * p);
+        g.strokeStyle = `rgba(225,235,245,${0.45 * (1 - p) * Math.min(1, level.rain * 1.6)})`;
+        g.beginPath(); g.ellipse(r.x, r.y, rad, rad * 0.28, 0, 0, 6.283); g.stroke();
+      }
+    } else ripples.length = 0;
+
+    // 雪
+    const nSnow = Math.round(1300 * level.snow * area);
+    while (flakes.length < nSnow) flakes.push(newFlake(true));
+    if (flakes.length > nSnow) flakes.length = nSnow;
+    if (nSnow) {
+      g.fillStyle = `rgba(235,240,248,${0.12 * level.snow})`; g.fillRect(0, 0, W, H);
+      g.fillStyle = 'rgba(255,255,255,0.85)';
+      g.beginPath();
+      for (const f of flakes) {
+        f.y += f.v * dt; f.ph += dt * (0.8 + f.z);
+        const x = f.x + Math.sin(f.ph) * f.sw + (now / 1000) * 18 * dpr * f.z;
+        g.moveTo(x % W + f.r, f.y); g.arc(x % W, f.y, f.r, 0, 6.283);
+        if (f.y > H + 5) Object.assign(f, newFlake(false));
+      }
+      g.globalAlpha = Math.min(1, level.snow * 1.3); g.fill(); g.globalAlpha = 1;
+    }
+
+    // 雷：随机闪光（亮两下）
+    if (target.thunder && level.rain > 0.5) {
+      if (now > nextBolt) { level.flash = 1; nextBolt = now + 6000 + Math.random() * 9000; setTimeout(() => level.flash = 0.8, 140); }
+      if (level.flash > 0.01) { g.fillStyle = `rgba(235,240,255,${0.5 * level.flash})`; g.fillRect(0, 0, W, H); level.flash *= Math.exp(-dt / 0.12); }
+    }
+    requestAnimationFrame(step);
+  }
+  addEventListener('resize', resize); resize(); requestAnimationFrame(step);
+  return { setTarget(s) { target.rain = s.rain || 0; target.fog = s.fog || 0; target.snow = s.snow || 0; target.thunder = !!s.thunder; } };
+})();
+</script>
+</body>
+</html>
